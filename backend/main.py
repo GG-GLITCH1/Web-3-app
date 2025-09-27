@@ -1,9 +1,9 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine, Column, Integer, String, Float, text
+from sqlalchemy import create_engine, Column, Integer, String, Float
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
@@ -15,7 +15,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ---------------- DATABASE SETUP ----------------
-# Use PostgreSQL on Render, SQLite locally
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./steevedeeve.db")
 
 if DATABASE_URL.startswith("postgres://"):
@@ -35,34 +34,24 @@ class User(Base):
     wallet_address = Column(String, nullable=True)
     created_at = Column(String, default=lambda: datetime.utcnow().isoformat())
 
-class TokenBalance(Base):
-    __tablename__ = "token_balances"
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, index=True)
-    token_symbol = Column(String)
-    balance = Column(Float)
-    last_updated = Column(String, default=lambda: datetime.utcnow().isoformat())
-
-# Create tables
 try:
     Base.metadata.create_all(bind=engine)
 except Exception as e:
-    print(f"Database setup warning: {e}")
+    print(f"Database setup note: {e}")
 
-# ---------------- SCHEMAS ----------------
+# ---------------- SCHEMAS (Pydantic v2) ----------------
 class UserBase(BaseModel):
     username: str
     email: str
+    
+    model_config = ConfigDict(from_attributes=True)  # Replaces orm_mode
 
 class UserCreate(UserBase):
     password: str
 
 class UserOut(UserBase):
     id: int
-    wallet_address: str = None
-    
-    class Config:
-        from_attributes = True  # Changed from orm_mode for Pydantic v2
+    wallet_address: str | None = None
 
 class Token(BaseModel):
     access_token: str
@@ -131,8 +120,7 @@ RPC_ENDPOINTS = [
 ERC20_ABI = [
     {"constant": True, "inputs": [{"name": "_owner", "type": "address"}], "name": "balanceOf", "outputs": [{"name": "balance", "type": "uint256"}], "type": "function"},
     {"constant": True, "inputs": [], "name": "decimals", "outputs": [{"name": "", "type": "uint8"}], "type": "function"},
-    {"constant": True, "inputs": [], "name": "symbol", "outputs": [{"name": "", "type": "string"}], "type": "function"},
-    {"constant": True, "inputs": [], "name": "name", "outputs": [{"name": "", "type": "string"}], "type": "function"}
+    {"constant": True, "inputs": [], "name": "symbol", "outputs": [{"name": "", "type": "string"}], "type": "function"}
 ]
 
 def get_web3():
@@ -211,9 +199,7 @@ def get_token_price(token_id: str):
         data = response.json()
         
         if token_id not in data:
-            token_id = token_id.lower()
-            if token_id not in data:
-                raise HTTPException(status_code=404, detail="Token not found")
+            raise HTTPException(status_code=404, detail="Token not found")
             
         return {"token": token_id, "price_usd": data[token_id]['usd']}
     except requests.RequestException:
@@ -234,10 +220,6 @@ def get_wallet_balance(address: str):
         eth_balance = w3.eth.get_balance(w3.to_checksum_address(address))
         eth_balance_ether = w3.from_wei(eth_balance, 'ether')
         
-        # ETH Price
-        eth_price_response = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd")
-        eth_price = eth_price_response.json().get('ethereum', {}).get('usd', 0)
-        
         # Token Balance
         contract = w3.eth.contract(
             address=w3.to_checksum_address(STEVEDEEVE_CONTRACT), 
@@ -248,19 +230,13 @@ def get_wallet_balance(address: str):
         decimals = contract.functions.decimals().call()
         token_balance_normalized = token_balance / (10 ** decimals)
         token_symbol = contract.functions.symbol().call()
-        token_name = contract.functions.name().call()
-        
-        portfolio_value = float(eth_balance_ether) * eth_price
         
         return {
             "wallet_address": address,
             "eth_balance": float(eth_balance_ether),
-            "eth_value_usd": float(eth_balance_ether) * eth_price,
-            "portfolio_value": portfolio_value,
             "tokens": [
                 {
                     "symbol": token_symbol,
-                    "name": token_name,
                     "balance": float(token_balance_normalized),
                     "contract_address": STEVEDEEVE_CONTRACT
                 }
@@ -269,23 +245,6 @@ def get_wallet_balance(address: str):
         
     except Exception as e:
         return {"error": f"Error fetching balance: {str(e)}"}
-
-@app.get("/portfolio/{address}")
-def get_portfolio_value(address: str):
-    balance_data = get_wallet_balance(address)
-    
-    if "error" in balance_data:
-        return balance_data
-    
-    return {
-        "total_value": balance_data["portfolio_value"],
-        "wallet": address,
-        "breakdown": {
-            "ethereum": balance_data["eth_value_usd"],
-            "tokens": {token["symbol"]: token["balance"] for token in balance_data["tokens"]}
-        },
-        "last_updated": datetime.utcnow().isoformat()
-    }
 
 @app.get("/")
 def root():
