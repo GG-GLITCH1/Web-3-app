@@ -36,7 +36,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Check if user is already logged in
+  // Check if user is already logged in.
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
