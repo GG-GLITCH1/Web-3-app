@@ -8,7 +8,6 @@ from pydantic import BaseModel
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
-from web3 import Web3
 import requests
 import os
 from dotenv import load_dotenv
