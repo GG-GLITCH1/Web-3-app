@@ -111,8 +111,32 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     return user
 
 # ---------------- WEB3 SETUP ----------------
+# ---------------- WEB3 SETUP ----------------
+def get_web3():
+    # Use FREE public RPC endpoints (no API key needed)
+    rpc_urls = [
+        "https://eth-mainnet.public.blastapi.io",
+        "https://rpc.ankr.com/eth", 
+        "https://cloudflare-eth.com",
+        "https://ethereum.publicnode.com"
+    ]
+    
+    # Try each RPC until one works
+    for rpc_url in rpc_urls:
+        try:
+            w3 = Web3(Web3.HTTPProvider(rpc_url))
+            if w3.is_connected():
+                print(f"✅ Connected to: {rpc_url}")
+                return w3
+        except:
+            continue
+    
+    raise Exception("All RPC connections failed")
+
 STEVEDEEVE_CONTRACT = "0x957dffb1b074953392bc2e587a472967342788ff"
 ERC20_ABI = [
+    # ... your existing ABI code
+]
     {
         "constant": True,
         "inputs": [{"name": "_owner", "type": "address"}],
