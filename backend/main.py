@@ -63,11 +63,16 @@ class WalletConnect(BaseModel):
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def hash_password(password: str):
+    # Fix: Truncate long passwords to prevent bcrypt error
+    if len(password) > 70:
+        password = password[:70]
     return pwd_context.hash(password)
 
 def verify_password(plain_password, hashed_password):
+    # Fix: Also truncate for verification to match
+    if len(plain_password) > 70:
+        plain_password = plain_password[:70]
     return pwd_context.verify(plain_password, hashed_password)
-
 # ---------------- AUTH ----------------
 SECRET_KEY = os.getenv("SECRET_KEY", "steevedeeve-super-secret-key-2024")
 ALGORITHM = "HS256"
