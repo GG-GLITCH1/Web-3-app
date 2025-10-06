@@ -226,47 +226,48 @@ def get_token_price(token_id: str):
 @app.get("/wallet/balance/{address}")
 def get_wallet_balance(address: str):
     """Get ETH balance and token balances for a wallet"""
-    w3 = get_web3()
-    
-    if not w3.is_connected():
-        raise HTTPException(status_code=500, detail="Blockchain connection failed")
-    
-    if not w3.is_address(address):
-        raise HTTPException(status_code=400, detail="Invalid Ethereum address")
-    
     try:
+        w3 = get_web3()  # Use our new function
+        
+        if not w3.is_address(address):
+            raise HTTPException(status_code=400, detail="Invalid Ethereum address")
+        
         # Get ETH balance
         eth_balance = w3.eth.get_balance(w3.to_checksum_address(address))
         eth_balance_ether = w3.from_wei(eth_balance, 'ether')
         
         # Get Stevedeeve token balance
-        contract = w3.eth.contract(
-            address=w3.to_checksum_address(STEVEDEEVE_CONTRACT), 
-            abi=ERC20_ABI
-        )
-        
-        token_balance = contract.functions.balanceOf(w3.to_checksum_address(address)).call()
-        decimals = contract.functions.decimals().call()
-        token_balance_normalized = token_balance / (10 ** decimals)
-        token_symbol = contract.functions.symbol().call()
-        token_name = contract.functions.name().call()
+        try:
+            contract = w3.eth.contract(
+                address=w3.to_checksum_address(STEVEDEEVE_CONTRACT), 
+                abi=ERC20_ABI
+            )
+            
+            token_balance = contract.functions.balanceOf(w3.to_checksum_address(address)).call()
+            decimals = contract.functions.decimals().call()
+            token_balance_normalized = token_balance / (10 ** decimals)
+            token_symbol = contract.functions.symbol().call()
+            token_name = contract.functions.name().call()
+            
+            tokens = [{
+                "symbol": token_symbol,
+                "name": token_name,
+                "balance": float(token_balance_normalized),
+                "contract_address": STEVEDEEVE_CONTRACT
+            }]
+        except Exception as token_error:
+            # If token lookup fails, just return ETH balance
+            tokens = []
+            print(f"Token lookup failed: {token_error}")
         
         return {
             "wallet_address": address,
             "eth_balance": float(eth_balance_ether),
-            "tokens": [
-                {
-                    "symbol": token_symbol,
-                    "name": token_name,
-                    "balance": float(token_balance_normalized),
-                    "contract_address": STEVEDEEVE_CONTRACT
-                }
-            ]
+            "tokens": tokens
         }
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching balance: {str(e)}")
-
 @app.get("/")
 def root():
     return {"message": "Official G.G Web3 API is running!", "version": "1.0.0"}
