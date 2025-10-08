@@ -1,88 +1,78 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import AdminDashboard from "./pages/AdminDashboard";
 
-// USE YOUR ACTUAL BACKEND URL
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  (import.meta.env.MODE === "development"
+    ? "/api"
+    : "https://web-3-app-3.onrender.com");
 
-export async function login(username, password) {
-  const res = await fetch(`${API_BASE_URL}/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ username, password })
-  });
-  return res.json();
-}
+const API = axios.create({ baseURL: API_BASE_URL });
 
-// Request interceptor for auth tokens
 API.interceptors.request.use((req) => {
   const token = localStorage.getItem("token");
-  if (token) {
-    req.headers.Authorization = `Bearer ${token}`;
-  }
+  if (token) req.headers.Authorization = `Bearer ${token}`;
   return req;
 });
 
-// Response interceptor for error handling
 API.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
+  (res) => res,
+  (err) => {
+    if (err.response?.status === 401) {
       localStorage.removeItem("token");
-      window.location.reload();
+      window.location.href = "/login";
     }
-    return Promise.reject(error);
+    return Promise.reject(err);
   }
 );
 
 function App() {
-  const [page, setPage] = useState("login");
-  const [formData, setFormData] = useState({ username: "", email: "", password: "" });
+  const navigate = useNavigate();
   const [user, setUser] = useState(null);
-  const [prices, setPrices] = useState({ eth: null, btc: null });
-  const [wallet, setWallet] = useState({ address: null, balance: null, tokens: [] });
+  const [prices, setPrices] = useState({ eth: null });
+  const [wallet, setWallet] = useState({ address: null, eth_balance: null });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [formData, setFormData] = useState({
+    username: "",
+    email: "",
+    password: "",
+  });
 
-  // Check if user is already logged in
   useEffect(() => {
     const token = localStorage.getItem("token");
-    if (token) {
-      fetchUserData();
-    }
+    if (token) fetchUserData();
   }, []);
 
   const fetchUserData = async () => {
     try {
-      const [userRes, ethPriceRes] = await Promise.all([
+      const [userRes, ethRes] = await Promise.all([
         API.get("/me"),
-        API.get("/prices/ethereum")
+        API.get("/prices/ethereum"),
       ]);
-      
       setUser(userRes.data);
-      setPrices(prev => ({ ...prev, eth: ethPriceRes.data.price_usd }));
-      setPage("dashboard");
+      setPrices({ eth: ethRes.data.price_usd });
     } catch (err) {
-      console.error("Failed to fetch user data:", err);
+      console.error("Fetch user failed:", err);
     }
   };
 
-  const handleInputChange = (e) => {
+  const handleInputChange = (e) =>
     setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
 
   const handleSignup = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError("");
-    
     try {
       await API.post("/signup", formData);
       alert("Signup successful! Please login.");
       setFormData({ username: "", email: "", password: "" });
-      setPage("login");
+      navigate("/login");
     } catch (err) {
-      console.error("SIGNUP ERROR:", err.response?.data);
-      setError(err.response?.data?.detail || "Signup failed - check backend connection");
+      setError(err.response?.data?.detail || "Signup failed");
     } finally {
       setLoading(false);
     }
@@ -92,24 +82,21 @@ function App() {
     e.preventDefault();
     setLoading(true);
     setError("");
-    
+
     try {
-      const loginForm = new URLSearchParams();
-      loginForm.append('username', formData.username);
-      loginForm.append('password', formData.password);
-      
-      const res = await API.post("/login", loginForm, {
-        headers: { 
-          "Content-Type": "application/x-www-form-urlencoded" 
-        }
+      const form = new URLSearchParams();
+      form.append("username", formData.username);
+      form.append("password", formData.password);
+
+      const res = await API.post("/login", form, {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
       });
-      
+
       localStorage.setItem("token", res.data.access_token);
       setUser(res.data.user);
-      setPage("dashboard");
+      navigate("/dashboard");
     } catch (err) {
-      console.error("LOGIN ERROR:", err.response?.data);
-      setError(err.response?.data?.detail || "Login failed - check backend connection");
+      setError(err.response?.data?.detail || "Login failed");
     } finally {
       setLoading(false);
     }
@@ -118,222 +105,186 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem("token");
     setUser(null);
-    setWallet({ address: null, balance: null, tokens: [] });
-    setPage("login");
+    navigate("/login");
   };
 
   const connectWallet = async () => {
-    if (!window.ethereum) {
-      alert("Please install MetaMask!");
-      return;
-    }
-
+    if (!window.ethereum) return alert("Please install MetaMask!");
     try {
       setLoading(true);
-      const accounts = await window.ethereum.request({ 
-        method: "eth_requestAccounts" 
+      const accounts = await window.ethereum.request({
+        method: "eth_requestAccounts",
       });
-      
       const address = accounts[0];
-      setWallet(prev => ({ ...prev, address }));
-      
-      // Save wallet to user profile
+      setWallet({ address });
+
       await API.post("/me/wallet", { address });
-      
-      // Fetch wallet balances
       const balanceRes = await API.get(`/wallet/balance/${address}`);
-      setWallet(prev => ({ ...prev, ...balanceRes.data }));
-      
+      setWallet((prev) => ({ ...prev, ...balanceRes.data }));
     } catch (err) {
       setError("Failed to connect wallet");
-      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Add some basic styling
   const styles = {
-    container: {
-      maxWidth: '800px',
-      margin: '0 auto',
-      padding: '20px',
-      fontFamily: 'monospace'
-    },
-    form: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '10px',
-      marginBottom: '20px'
-    },
+    container: { maxWidth: "800px", margin: "auto", padding: "20px" },
+    form: { display: "flex", flexDirection: "column", gap: "10px" },
     input: {
-      padding: '10px',
-      border: '1px solid #00ff00',
-      background: 'transparent',
-      color: '#00ff00',
-      borderRadius: '5px',
-      fontSize: '16px'
+      padding: "10px",
+      border: "1px solid #00ff00",
+      background: "transparent",
+      color: "#00ff00",
+      borderRadius: "5px",
     },
     button: {
-      padding: '12px 24px',
-      border: '1px solid #00ff00',
-      background: '#00ff00',
-      color: '#000',
-      borderRadius: '5px',
-      cursor: 'pointer',
-      fontWeight: 'bold',
-      fontSize: '16px'
-    },
-    error: {
-      color: '#ff0066',
-      margin: '10px 0',
-      padding: '10px',
-      border: '1px solid #ff0066',
-      borderRadius: '5px'
-    },
-    section: {
-      margin: '20px 0',
-      padding: '20px',
-      border: '1px solid #00ff00',
-      borderRadius: '10px'
+      padding: "12px",
+      border: "1px solid #00ff00",
+      background: "#00ff00",
+      color: "#000",
+      borderRadius: "5px",
+      fontWeight: "bold",
+      cursor: "pointer",
     },
     link: {
-      color: '#00ff00',
-      cursor: 'pointer',
-      textDecoration: 'underline',
-      marginTop: '15px',
-      display: 'block'
-    }
+      color: "#00ff00",
+      cursor: "pointer",
+      textDecoration: "underline",
+    },
   };
 
-  // Render methods
-  if (page === "signup") {
-    return (
-      <div style={styles.container}>
-        <h2>🔥 Official G.G - Sign Up</h2>
-        {error && <div style={styles.error}>{error}</div>}
-        
-        <form style={styles.form} onSubmit={handleSignup}>
-          <input 
-            style={styles.input}
-            name="username" 
-            placeholder="Username" 
-            value={formData.username} 
-            onChange={handleInputChange} 
-            required 
-          />
-          <input 
-            style={styles.input}
-            name="email" 
-            type="email" 
-            placeholder="Email" 
-            value={formData.email} 
-            onChange={handleInputChange} 
-            required 
-          />
-          <input 
-            style={styles.input}
-            name="password" 
-            type="password" 
-            placeholder="Password" 
-            value={formData.password} 
-            onChange={handleInputChange} 
-            required 
-          />
-          <button style={styles.button} type="submit" disabled={loading}>
-            {loading ? "Creating Account..." : "Sign Up"}
-          </button>
-        </form>
-        
-        <span style={styles.link} onClick={() => setPage("login")}>
-          Already have an account? Login
-        </span>
-      </div>
-    );
-  }
-
-  if (page === "login") {
-    return (
-      <div style={styles.container}>
-        <h2>🔥 Official G.G - Login</h2>
-        {error && <div style={styles.error}>{error}</div>}
-        
-        <form style={styles.form} onSubmit={handleLogin}>
-          <input 
-            style={styles.input}
-            name="username" 
-            placeholder="Username" 
-            value={formData.username} 
-            onChange={handleInputChange} 
-            required 
-          />
-          <input 
-            style={styles.input}
-            name="password" 
-            type="password" 
-            placeholder="Password" 
-            value={formData.password} 
-            onChange={handleInputChange} 
-            required 
-          />
-          <button style={styles.button} type="submit" disabled={loading}>
-            {loading ? "Logging in..." : "Login"}
-          </button>
-        </form>
-        
-        <span style={styles.link} onClick={() => setPage("signup")}>
-          Don't have an account? Sign up
-        </span>
-      </div>
-    );
-  }
+  const isAdmin = user?.role === "admin";
 
   return (
-    <div style={styles.container}>
-      <h2>🔥 Official G.G Dashboard</h2>
-      
-      {user && (
-        <div style={styles.section}>
-          <h3>Welcome, {user.username}!</h3>
-          <p>Email: {user.email}</p>
-          {user.wallet_address && <p>Wallet: {user.wallet_address}</p>}
-        </div>
-      )}
-
-      <div style={styles.section}>
-        <h3>💰 Market Prices</h3>
-        {prices.eth && <p>ETH: ${prices.eth}</p>}
-        {prices.btc && <p>BTC: ${prices.btc}</p>}
-      </div>
-
-      <div style={styles.section}>
-        <h3>🔗 Wallet Connection</h3>
-        <button 
-          style={styles.button} 
-          onClick={connectWallet} 
-          disabled={loading || !window.ethereum}
-        >
-          {loading ? "Connecting..." : wallet.address ? 
-            `Connected: ${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}` : 
-            "Connect MetaMask"}
-        </button>
-
-        {wallet.eth_balance !== null && (
-          <div style={{marginTop: '15px'}}>
-            <p>ETH Balance: {wallet.eth_balance}</p>
-            {wallet.tokens && wallet.tokens.map(token => (
-              <p key={token.symbol}>
-                {token.name} ({token.symbol}): {token.balance}
-              </p>
-            ))}
+    <Routes>
+      {/* Login Page */}
+      <Route
+        path="/login"
+        element={
+          <div style={styles.container}>
+            <h2>🔥 G.G Login</h2>
+            {error && <p style={{ color: "red" }}>{error}</p>}
+            <form style={styles.form} onSubmit={handleLogin}>
+              <input
+                name="username"
+                placeholder="Username"
+                style={styles.input}
+                value={formData.username}
+                onChange={handleInputChange}
+              />
+              <input
+                name="password"
+                type="password"
+                placeholder="Password"
+                style={styles.input}
+                value={formData.password}
+                onChange={handleInputChange}
+              />
+              <button style={styles.button} disabled={loading}>
+                {loading ? "Logging in..." : "Login"}
+              </button>
+            </form>
+            <p style={styles.link} onClick={() => navigate("/signup")}>
+              Don't have an account? Sign up
+            </p>
           </div>
-        )}
-      </div>
+        }
+      />
 
-      <button style={{...styles.button, background: 'transparent', color: '#00ff00'}} onClick={handleLogout}>
-        Logout
-      </button>
-    </div>
+      {/* Signup Page */}
+      <Route
+        path="/signup"
+        element={
+          <div style={styles.container}>
+            <h2>🔥 G.G Sign Up</h2>
+            {error && <p style={{ color: "red" }}>{error}</p>}
+            <form style={styles.form} onSubmit={handleSignup}>
+              <input
+                name="username"
+                placeholder="Username"
+                style={styles.input}
+                value={formData.username}
+                onChange={handleInputChange}
+              />
+              <input
+                name="email"
+                type="email"
+                placeholder="Email"
+                style={styles.input}
+                value={formData.email}
+                onChange={handleInputChange}
+              />
+              <input
+                name="password"
+                type="password"
+                placeholder="Password"
+                style={styles.input}
+                value={formData.password}
+                onChange={handleInputChange}
+              />
+              <button style={styles.button} disabled={loading}>
+                {loading ? "Creating Account..." : "Sign Up"}
+              </button>
+            </form>
+            <p style={styles.link} onClick={() => navigate("/login")}>
+              Already have an account? Login
+            </p>
+          </div>
+        }
+      />
+
+      {/* Dashboard */}
+      <Route
+        path="/dashboard"
+        element={
+          !user ? (
+            <Navigate to="/login" />
+          ) : (
+            <div style={styles.container}>
+              <h2>🔥 G.G Dashboard</h2>
+              <p>Welcome, {user.username}</p>
+              <p>Role: {user.role}</p>
+              <p>ETH: ${prices.eth}</p>
+              <button style={styles.button} onClick={connectWallet}>
+                {wallet.address
+                  ? `Wallet: ${wallet.address.slice(0, 8)}...`
+                  : "Connect MetaMask"}
+              </button>
+              {isAdmin && (
+                <button
+                  style={styles.button}
+                  onClick={() => navigate("/admin")}
+                >
+                  Go to Admin Panel
+                </button>
+              )}
+              <button
+                style={{
+                  ...styles.button,
+                  background: "transparent",
+                  color: "#00ff00",
+                }}
+                onClick={handleLogout}
+              >
+                Logout
+              </button>
+            </div>
+          )
+        }
+      />
+
+      {/* Admin Page (Protected) */}
+      <Route
+        path="/admin"
+        element={
+          isAdmin ? <AdminDashboard user={user} /> : <Navigate to="/login" />
+        }
+      />
+
+      {/* Redirect root */}
+      <Route path="*" element={<Navigate to="/login" />} />
+    </Routes>
   );
 }
 
