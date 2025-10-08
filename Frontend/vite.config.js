@@ -1,20 +1,20 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// ✅ Update this to your Render backend URL
+// ✅ Your backend on Render
 const backendURL = 'https://web-3-app-3.onrender.com'
 
 export default defineConfig({
+  base: './', // 👈 Important for Vercel static hosting
   plugins: [react()],
   server: {
     port: 3000,
     proxy: {
-      // Any request starting with /api will go to your backend
       '/api': {
         target: backendURL,
         changeOrigin: true,
         secure: false,
-        rewrite: (path) => path.replace(/^\/api/, '') // remove /api prefix before sending to backend
+        rewrite: (path) => path.replace(/^\/api/, '') // remove /api prefix
       }
     }
   },
@@ -27,7 +27,7 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      external: [] // Fixes Vite warnings for external modules
+      external: [] // silence axios warnings
     },
   },
 })
