@@ -1,12 +1,20 @@
-fastapi>=0.95.0
-uvicorn[standard]>=0.22.0
-sqlalchemy>=1.4.0
-psycopg2>=2.9.0
+# Core framework
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+
+# Auth + Password
+passlib>=1.7.4
+bcrypt>=3.2.0,<4.0.0
 python-jose>=3.3.0
-python-multipart>=0.0.5
-passlib[bcrypt]>=1.7.4
-pydantic>=1.10.0
-python-dotenv>=1.0.0
-requests>=2.25.0
-PyJWT>=2.8.0
-argon2-cffi==23.1.0
+
+# Database
+SQLAlchemy>=2.0.30
+
+# Validation
+pydantic>=2.6.1
+
+# CORS
+requests>=2.31.0
+
+# Logging / utils
+python-dotenv>=1.0.1
