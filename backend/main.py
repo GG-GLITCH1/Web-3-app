@@ -175,15 +175,34 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
 
 @app.post("/login", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    logger.info(f"🧾 Login attempt: {form_data.username}")
+    
     user = db.query(User).filter(User.username == form_data.username).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    if not user:
+        logger.warning(f"❌ User not found: {form_data.username}")
         raise HTTPException(status_code=401, detail="Invalid username or password")
+    
+    try:
+        if not verify_password(form_data.password, user.hashed_password):
+            logger.warning(f"❌ Invalid password for user: {form_data.username}")
+            raise HTTPException(status_code=401, detail="Invalid username or password")
+    except Exception as e:
+        logger.error(f"💥 Password verification failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal password verification error")
 
-    access_token = create_access_token({"sub": user.username})
-    user_out = UserOut.from_orm(user)
-    logger.info(f"✅ Login success: {user.username}")
-
-    return {"access_token": access_token, "token_type": "bearer", "user": user_out}
+    try:
+        access_token = create_access_token(data={"sub": user.username})
+        logger.info(f"✅ Login successful: {form_data.username}")
+        
+        user_out = UserOut.from_orm(user)
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": user_out
+        }
+    except Exception as e:
+        logger.error(f"💥 Token generation failed: {e}")
+        raise HTTPException(status_code=500, detail="Token generation error")
 
 @app.get("/me", response_model=UserOut)
 def read_me(current_user: User = Depends(get_current_user)):
