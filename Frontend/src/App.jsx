@@ -2,9 +2,16 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 
 // USE YOUR ACTUAL BACKEND URL
-const API = axios.create({
-  baseURL: "https://web-3-app-3.onrender.com",
-});
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+export async function login(username, password) {
+  const res = await fetch(`${API_BASE_URL}/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ username, password })
+  });
+  return res.json();
+}
 
 // Request interceptor for auth tokens
 API.interceptors.request.use((req) => {
