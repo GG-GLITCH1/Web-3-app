@@ -1,291 +1,168 @@
 import React, { useState, useEffect } from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate, Link } from "react-router-dom";
 import axios from "axios";
-import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
-import AdminDashboard from "./pages/AdminDashboard";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ||
-  (import.meta.env.MODE === "development"
-    ? "/api"
-    : "https://web-3-app-3.onrender.com");
+const API = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL || "/api",
+});
 
-const API = axios.create({ baseURL: API_BASE_URL });
-
+// Auth token interceptor
 API.interceptors.request.use((req) => {
   const token = localStorage.getItem("token");
   if (token) req.headers.Authorization = `Bearer ${token}`;
   return req;
 });
 
-API.interceptors.response.use(
-  (res) => res,
-  (err) => {
-    if (err.response?.status === 401) {
-      localStorage.removeItem("token");
-      window.location.href = "/login";
-    }
-    return Promise.reject(err);
-  }
-);
-
-function App() {
-  const navigate = useNavigate();
-  const [user, setUser] = useState(null);
-  const [prices, setPrices] = useState({ eth: null });
-  const [wallet, setWallet] = useState({ address: null, eth_balance: null });
-  const [loading, setLoading] = useState(false);
+function LoginPage({ setUser }) {
+  const [form, setForm] = useState({ username: "", password: "" });
   const [error, setError] = useState("");
-  const [formData, setFormData] = useState({
-    username: "",
-    email: "",
-    password: "",
-  });
-
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (token) fetchUserData();
-  }, []);
-
-  const fetchUserData = async () => {
-    try {
-      const [userRes, ethRes] = await Promise.all([
-        API.get("/me"),
-        API.get("/prices/ethereum"),
-      ]);
-      setUser(userRes.data);
-      setPrices({ eth: ethRes.data.price_usd });
-    } catch (err) {
-      console.error("Fetch user failed:", err);
-    }
-  };
-
-  const handleInputChange = (e) =>
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-
-  const handleSignup = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-    try {
-      await API.post("/signup", formData);
-      alert("Signup successful! Please login.");
-      setFormData({ username: "", email: "", password: "" });
-      navigate("/login");
-    } catch (err) {
-      setError(err.response?.data?.detail || "Signup failed");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    setLoading(true);
     setError("");
-
     try {
-      const form = new URLSearchParams();
-      form.append("username", formData.username);
-      form.append("password", formData.password);
-
-      const res = await API.post("/login", form, {
+      const res = await API.post("/login", new URLSearchParams(form), {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
       });
-
       localStorage.setItem("token", res.data.access_token);
       setUser(res.data.user);
-      navigate("/dashboard");
     } catch (err) {
       setError(err.response?.data?.detail || "Login failed");
-    } finally {
-      setLoading(false);
     }
   };
-
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    setUser(null);
-    navigate("/login");
-  };
-
-  const connectWallet = async () => {
-    if (!window.ethereum) return alert("Please install MetaMask!");
-    try {
-      setLoading(true);
-      const accounts = await window.ethereum.request({
-        method: "eth_requestAccounts",
-      });
-      const address = accounts[0];
-      setWallet({ address });
-
-      await API.post("/me/wallet", { address });
-      const balanceRes = await API.get(`/wallet/balance/${address}`);
-      setWallet((prev) => ({ ...prev, ...balanceRes.data }));
-    } catch (err) {
-      setError("Failed to connect wallet");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const styles = {
-    container: { maxWidth: "800px", margin: "auto", padding: "20px" },
-    form: { display: "flex", flexDirection: "column", gap: "10px" },
-    input: {
-      padding: "10px",
-      border: "1px solid #00ff00",
-      background: "transparent",
-      color: "#00ff00",
-      borderRadius: "5px",
-    },
-    button: {
-      padding: "12px",
-      border: "1px solid #00ff00",
-      background: "#00ff00",
-      color: "#000",
-      borderRadius: "5px",
-      fontWeight: "bold",
-      cursor: "pointer",
-    },
-    link: {
-      color: "#00ff00",
-      cursor: "pointer",
-      textDecoration: "underline",
-    },
-  };
-
-  const isAdmin = user?.role === "admin";
 
   return (
-    <Routes>
-      {/* Login Page */}
-      <Route
-        path="/login"
-        element={
-          <div style={styles.container}>
-            <h2>🔥 G.G Login</h2>
-            {error && <p style={{ color: "red" }}>{error}</p>}
-            <form style={styles.form} onSubmit={handleLogin}>
-              <input
-                name="username"
-                placeholder="Username"
-                style={styles.input}
-                value={formData.username}
-                onChange={handleInputChange}
-              />
-              <input
-                name="password"
-                type="password"
-                placeholder="Password"
-                style={styles.input}
-                value={formData.password}
-                onChange={handleInputChange}
-              />
-              <button style={styles.button} disabled={loading}>
-                {loading ? "Logging in..." : "Login"}
-              </button>
-            </form>
-            <p style={styles.link} onClick={() => navigate("/signup")}>
-              Don't have an account? Sign up
-            </p>
-          </div>
-        }
-      />
-
-      {/* Signup Page */}
-      <Route
-        path="/signup"
-        element={
-          <div style={styles.container}>
-            <h2>🔥 G.G Sign Up</h2>
-            {error && <p style={{ color: "red" }}>{error}</p>}
-            <form style={styles.form} onSubmit={handleSignup}>
-              <input
-                name="username"
-                placeholder="Username"
-                style={styles.input}
-                value={formData.username}
-                onChange={handleInputChange}
-              />
-              <input
-                name="email"
-                type="email"
-                placeholder="Email"
-                style={styles.input}
-                value={formData.email}
-                onChange={handleInputChange}
-              />
-              <input
-                name="password"
-                type="password"
-                placeholder="Password"
-                style={styles.input}
-                value={formData.password}
-                onChange={handleInputChange}
-              />
-              <button style={styles.button} disabled={loading}>
-                {loading ? "Creating Account..." : "Sign Up"}
-              </button>
-            </form>
-            <p style={styles.link} onClick={() => navigate("/login")}>
-              Already have an account? Login
-            </p>
-          </div>
-        }
-      />
-
-      {/* Dashboard */}
-      <Route
-        path="/dashboard"
-        element={
-          !user ? (
-            <Navigate to="/login" />
-          ) : (
-            <div style={styles.container}>
-              <h2>🔥 G.G Dashboard</h2>
-              <p>Welcome, {user.username}</p>
-              <p>Role: {user.role}</p>
-              <p>ETH: ${prices.eth}</p>
-              <button style={styles.button} onClick={connectWallet}>
-                {wallet.address
-                  ? `Wallet: ${wallet.address.slice(0, 8)}...`
-                  : "Connect MetaMask"}
-              </button>
-              {isAdmin && (
-                <button
-                  style={styles.button}
-                  onClick={() => navigate("/admin")}
-                >
-                  Go to Admin Panel
-                </button>
-              )}
-              <button
-                style={{
-                  ...styles.button,
-                  background: "transparent",
-                  color: "#00ff00",
-                }}
-                onClick={handleLogout}
-              >
-                Logout
-              </button>
-            </div>
-          )
-        }
-      />
-
-      {/* Admin Page (Protected) */}
-      <Route
-        path="/admin"
-        element={
-          isAdmin ? <AdminDashboard user={user} /> : <Navigate to="/login" />
-        }
-      />
-
-      {/* Redirect root */}
-      <Route path="*" element={<Navigate to="/login" />} />
-    </Routes>
+    <div style={styles.container}>
+      <h2>🔥 Login</h2>
+      {error && <div style={styles.error}>{error}</div>}
+      <form style={styles.form} onSubmit={handleLogin}>
+        <input
+          style={styles.input}
+          placeholder="Username"
+          name="username"
+          value={form.username}
+          onChange={(e) => setForm({ ...form, username: e.target.value })}
+        />
+        <input
+          style={styles.input}
+          type="password"
+          placeholder="Password"
+          name="password"
+          value={form.password}
+          onChange={(e) => setForm({ ...form, password: e.target.value })}
+        />
+        <button style={styles.button}>Login</button>
+      </form>
+      <Link to="/signup" style={styles.link}>Create account</Link>
+    </div>
   );
 }
+
+function SignupPage() {
+  const [form, setForm] = useState({ username: "", email: "", password: "" });
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+
+  const handleSignup = async (e) => {
+    e.preventDefault();
+    try {
+      await API.post("/signup", form);
+      setDone(true);
+    } catch (err) {
+      setError(err.response?.data?.detail || "Signup failed");
+    }
+  };
+
+  if (done)
+    return (
+      <div style={styles.container}>
+        <h3>Account created successfully!</h3>
+        <Link to="/" style={styles.link}>Go to login</Link>
+      </div>
+    );
+
+  return (
+    <div style={styles.container}>
+      <h2>🔥 Sign Up</h2>
+      {error && <div style={styles.error}>{error}</div>}
+      <form style={styles.form} onSubmit={handleSignup}>
+        <input style={styles.input} placeholder="Username" name="username" onChange={(e) => setForm({ ...form, username: e.target.value })} />
+        <input style={styles.input} placeholder="Email" name="email" onChange={(e) => setForm({ ...form, email: e.target.value })} />
+        <input style={styles.input} type="password" placeholder="Password" name="password" onChange={(e) => setForm({ ...form, password: e.target.value })} />
+        <button style={styles.button}>Sign Up</button>
+      </form>
+    </div>
+  );
+}
+
+function Dashboard({ user, logout }) {
+  return (
+    <div style={styles.container}>
+      <h2>🔥 Welcome {user.username}</h2>
+      <p>Role: {user.role}</p>
+      <Link to="/admin" style={styles.link}>Go to Admin Panel</Link>
+      <button style={styles.button} onClick={logout}>Logout</button>
+    </div>
+  );
+}
+
+function AdminPanel({ user, logout }) {
+  if (user.role !== "admin") return <Navigate to="/" />;
+  return (
+    <div style={styles.container}>
+      <h2>🛠 Admin Dashboard</h2>
+      <p>Welcome, {user.username}! You have full privileges.</p>
+      <button style={styles.button} onClick={logout}>Logout</button>
+      <Link to="/" style={styles.link}>Back to Dashboard</Link>
+    </div>
+  );
+}
+
+function NotFound() {
+  return (
+    <div style={styles.container}>
+      <h2>404 — Page Not Found</h2>
+      <Link to="/" style={styles.link}>Go Home</Link>
+    </div>
+  );
+}
+
+function App() {
+  const [user, setUser] = useState(null);
+
+  const logout = () => {
+    localStorage.removeItem("token");
+    setUser(null);
+  };
+
+  return (
+    <Router>
+      <Routes>
+        {!user ? (
+          <>
+            <Route path="/" element={<LoginPage setUser={setUser} />} />
+            <Route path="/signup" element={<SignupPage />} />
+            <Route path="*" element={<Navigate to="/" />} />
+          </>
+        ) : (
+          <>
+            <Route path="/" element={<Dashboard user={user} logout={logout} />} />
+            <Route path="/admin" element={<AdminPanel user={user} logout={logout} />} />
+            <Route path="*" element={<NotFound />} />
+          </>
+        )}
+      </Routes>
+    </Router>
+  );
+}
+
+const styles = {
+  container: { maxWidth: 600, margin: "50px auto", fontFamily: "monospace", color: "#00ff00", textAlign: "center" },
+  form: { display: "flex", flexDirection: "column", gap: 10, marginTop: 20 },
+  input: { padding: 10, border: "1px solid #00ff00", background: "transparent", color: "#00ff00" },
+  button: { padding: 10, border: "1px solid #00ff00", background: "#00ff00", color: "#000", cursor: "pointer" },
+  error: { color: "red", marginTop: 10 },
+  link: { display: "block", marginTop: 15, color: "#00ff00", textDecoration: "underline" },
+};
 
 export default App;
