@@ -11,10 +11,12 @@ python-jose>=3.3.0
 SQLAlchemy>=2.0.30
 
 # Validation
-pydantic>=2.6.1
+pydantic[email]>=2.6.1
+email-validator>=2.1.0
 
 # CORS
 requests>=2.31.0
 
 # Logging / utils
 python-dotenv>=1.0.1
+
